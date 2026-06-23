@@ -1,399 +1,69 @@
-# Smart Home Simulator | IoT Management Platform
+# Smart Home Simulator
 
-![Project Status](https://img.shields.io/badge/status-active-success.svg)
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)
-![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)
-![Docker](https://img.shields.io/badge/Docker-Containerized-2496ED?logo=docker&logoColor=white)
-![Azure](https://img.shields.io/badge/Azure-Deployed-0078D4?logo=microsoftazure&logoColor=white)
+> **Smart Home Simulator** is a fullstack IoT platform simulating connected home devices. It ingests device data over MQTT and TCP, pushes real-time updates to a React frontend via SignalR, and deploys to Azure through Infrastructure as Code.
 
-> **Smart Home Simulator** is a fullstack IoT (Internet of Things) simulation platform for managing smart home devices. It provides real-time monitoring, device control, and comprehensive service history tracking through a modern web interface.
+[Live Demo](https://lively-pebble-072971f10.6.azurestaticapps.net) · ![CI](https://github.com/jakub-jurkian/smart-home-simulator/actions/workflows/azure-deploy.yml/badge.svg)
 
 ---
 
-## Screenshots
+## Engineering Highlights
 
-|                        Main Page                            |                         User Profile                            |
-| :---------------------------------------------------------: | :-------------------------------------------------------------: |
-| ![Main Page Placeholder](frontend/docs/images/landing-desktop.webp)   | ![User Profile Placeholder](frontend/docs/images/user-profile-desktop.webp)  |
-
-|                     Main Mobile                          |                        User Profile Mobile                |
-| :------------------------------------------------------: | :-------------------------------------------------------: |
-| ![Main Mobile Placeholder](frontend/docs/images/landing-mobile.webp) | ![User Profile Mobile Placeholder](frontend/docs/images/user-profile-mobile.webp) |
-
----
-
-## Dockerized Ecosystem
-
-The entire platform is containerized using **Docker** and **Docker Compose**, allowing for a "one-command" setup of the full infrastructure.
-
-### Services Included
-
-| Service | Image / Build | Ports | Description |
-| :--- | :--- | :--- | :--- |
-| **API** | Multi-stage `.NET 10` Dockerfile | `5000:8080`, `9000:9000` | ASP.NET Core backend with EF Core + SQLite |
-| **Frontend** | Vite dev server Dockerfile | `5173:5173` | React 19 app with hot-reload via volume mount |
-| **MQTT Broker** | `eclipse-mosquitto:latest` | `1883` (TCP), `9001` (WS) | IoT message broker with persistent data |
-| **Simulator** | Multi-stage `.NET 10` Dockerfile | — | Publishes random temperature readings every 5s |
-
-### Multi-Stage Docker Builds
-
-Both the API and Simulator use **multi-stage Dockerfiles** to minimize image size:
-
-1. **Build stage** — uses the full .NET 10 SDK (~800 MB) to restore, compile, and publish.
-2. **Runtime stage** — uses the slim `aspnet:10.0` runtime image (~200 MB) with only the compiled DLLs.
-
-```dockerfile
-# Build
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
-WORKDIR /src
-COPY . .
-RUN dotnet publish "SmartHome.Api.csproj" -c Release -o /app/publish
-
-# Run
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
-WORKDIR /app
-COPY --from=build /app/publish .
-ENTRYPOINT ["dotnet", "SmartHome.Api.dll"]
-```
-
-The API container includes a built-in **health check** (`/api/devices`) with 30-second intervals.
-
-### Docker Compose Networking
-
-All services share the default Compose network. Internal communication uses container names as hostnames:
-
-- Simulator → API: `http://api:8080/api/devices/all-system`
-- API → MQTT: `mqtt:1883`
-- Frontend → API: `http://localhost:5000/api` (browser-side, routed through host)
-
----
-
-## Azure Cloud Deployment
-
-The project includes a complete **Infrastructure-as-Code** setup for deploying to Microsoft Azure.
-
-### Azure Resources
-
-| Resource | Azure Service | Purpose |
-| :--- | :--- | :--- |
-| **Backend API** | Container App (external ingress) | Runs the .NET API container on port 8080 |
-| **MQTT Broker** | Container App (internal TCP) | Mosquitto accessible only within the environment |
-| **Simulator** | Container App (no ingress) | Headless background container, no public access |
-| **Frontend** | Static Web App (Free tier) | Hosts the built React SPA globally via CDN |
-| **Database** | Azure SQL Database (Basic tier) | Production SQL Server replacing dev SQLite |
-| **Image Registry** | Azure Container Registry (Basic) | Stores Docker images for all container apps |
-| **Monitoring** | Log Analytics Workspace | Collects container logs and metrics |
-
-### Infrastructure as Code (Bicep)
-
-All Azure resources are defined in `infra/main.bicep` — a single declarative template that provisions the entire environment:
-
-```
-infra/
-└── main.bicep       # Container Apps Environment, SQL Server, ACR, Static Web App
-```
-
-### One-Command Deployment
-
-The `deploy.ps1` PowerShell script automates the full CI/CD pipeline locally:
-
-```powershell
-./deploy.ps1
-```
-
-**What it does (in order):**
-
-1. Reads configuration from GitHub CLI variables (`gh variable get`)
-2. Loads SQL credentials from a local `.env` file
-3. Logs into Azure Container Registry
-4. Builds and pushes all Docker images (MQTT, API, Simulator)
-5. Deploys Azure infrastructure via Bicep (`az deployment group create`)
-6. Fetches the dynamic API URL from the deployed Container App
-7. Builds the React frontend with the production API URL baked in
-8. Deploys the frontend to Azure Static Web Apps via SWA CLI
-
-### Dual Database Strategy
-
-The application uses **SQLite** for local development and **Azure SQL Server** for production. The switch is automatic based on `ASPNETCORE_ENVIRONMENT`:
-
-| Environment | Provider | Connection |
-| :--- | :--- | :--- |
-| `Development` | SQLite | `Data Source=smarthome.db` |
-| `Production` | SQL Server | `ConnectionStrings__DefaultConnection` env var |
-
-On first production startup, the API checks `INFORMATION_SCHEMA.TABLES` for existing schema and creates tables via `EnsureCreated()` if missing.
-
-### GitHub Actions CI/CD
-
-A `.github/workflows/azure-deploy.yml` pipeline automates deployment on push to `main`:
-
-1. Run all tests (unit, integration, BDD)
-2. Build and push Docker images to ACR
-3. Deploy infrastructure via Bicep
-4. Build and deploy frontend to Static Web Apps
-
----
-
-## Key Features
-
-### For Users
-
-- **Secure Authentication:** Register/Login with HttpOnly cookies, BCrypt password hashing, and session persistence.
-- **Device Management:** Add, rename, toggle, and delete smart devices (Light Bulbs, Temperature Sensors).
-- **Room Organization:** Group devices into rooms for better organization and bulk operations.
-- **Real-time Monitoring:** Live temperature updates via MQTT protocol and instant UI refresh through WebSockets.
-- **Service History:** Maintain detailed maintenance logs for each device with full CRUD operations.
-- **Live Search:** Filter devices instantly with pattern-based searching.
-
-### Technical Highlights (Under the Hood)
-
-- **Multi-Protocol Communication:**
-  - **MQTT:** IoT simulator publishes temperature data to a broker; backend `MqttListenerService` subscribes and updates the database.
-  - **WebSockets (SignalR):** Bidirectional real-time communication for instant UI updates (`RefreshDevices`, `ReceiveTemperature` events).
-  - **TCP Socket Server:** Alternative raw text command interface on port `9000` (supports `LOGIN`, `LIST`, `TOGGLE` commands).
-
-- **Clean Architecture:** Full separation of concerns with `Domain`, `Infrastructure`, and `Api` layers following SOLID principles.
-- **Entity Framework Core:** TPH (Table Per Hierarchy) inheritance pattern for device polymorphism (`Device` → `LightBulb`, `TemperatureSensor`).
-- **Background Services:** `BackgroundService` implementations for MQTT listener and TCP server running concurrently with the API.
-- **Comprehensive Testing:** Unit tests (xUnit + Moq), Integration tests, BDD tests (Reqnroll/Gherkin), and Performance tests (NBomber) with >80% code coverage.
-- **CI/CD Pipeline:** GitHub Actions workflow for automated testing on every push/PR.
+* **Multi-protocol communication:** The simulator publishes sensor data over MQTT; a background `MqttListenerService` consumes it and updates the database. `SignalR` pushes those updates to connected clients in real time. A separate raw TCP socket server (port `9000`) offers an alternative text-command interface (`LOGIN`, `LIST`, `TOGGLE`).
+* **Clean Architecture:** Strict separation between `Domain`, `Infrastructure`, and `Api` layers. Device polymorphism (light bulbs, temperature sensors) is modeled with EF Core's Table-Per-Hierarchy (`TPH`) inheritance.
+* **Docker + Azure IaC:** Multi-stage Docker builds cut image size from ~800MB (SDK) to ~200MB (runtime-only). The entire Azure environment (Container Apps, Static Web App, SQL Database, ACR) is defined declaratively in a single `Bicep` template.
+* **Hybrid CI/CD:** GitHub Actions runs tests, verifies Docker builds, and deploys the Static Web App; container apps are deployed via a local Bicep + `deploy.ps1` pipeline (workaround for university-tenant restrictions on Azure Service Principals).
+* **Testing:** 80%+ coverage across unit tests (`xUnit`/`Moq`), integration tests, BDD scenarios (`Reqnroll`/`Gherkin`), and load tests (`NBomber`).
 
 ---
 
 ## Tech Stack
 
-**Backend:**
-
-- ![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white) **ASP.NET Core 10 Web API**
-- ![EF Core](https://img.shields.io/badge/EF_Core-10-512BD4?logo=dotnet&logoColor=white) **Entity Framework Core** (SQLite)
-- ![MQTT](https://img.shields.io/badge/MQTT-MQTTnet-660066) **MQTTnet** (IoT Communication)
-- ![SignalR](https://img.shields.io/badge/SignalR-WebSockets-512BD4) **SignalR** (Real-time Hub)
-- ![Serilog](https://img.shields.io/badge/Serilog-Logging-red) **Serilog** (Structured Logging)
-
-**Frontend:**
-
-- ![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black) **React 18** (Vite)
-- ![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178C6?logo=typescript&logoColor=white) **TypeScript**
-- ![Tailwind](https://img.shields.io/badge/Tailwind_CSS-4.0-06B6D4?logo=tailwindcss&logoColor=white) **Tailwind CSS v4**
-- ![SignalR](https://img.shields.io/badge/@microsoft/signalr-Client-512BD4) **SignalR Client**
-
-**Testing & DevOps:**
-
-- ![xUnit](https://img.shields.io/badge/xUnit-Testing-5C2D91) **xUnit + Moq** (Unit Tests)
-- ![Reqnroll](https://img.shields.io/badge/Reqnroll-BDD-green) **Reqnroll** (BDD/Gherkin)
-- ![NBomber](https://img.shields.io/badge/NBomber-Performance-orange) **NBomber** (Load Testing)
-- ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI/CD-2088FF?logo=githubactions&logoColor=white) **GitHub Actions**
-- ![Docker](https://img.shields.io/badge/Docker-Orchestration-2496ED?logo=docker&logoColor=white) **Docker Compose**
-- ![Mosquitto](https://img.shields.io/badge/Mosquitto-Broker-3C5280?logo=eclipsemosquitto&logoColor=white) **Eclipse Mosquitto**
-
-**Cloud (Azure):**
-
-- ![Azure](https://img.shields.io/badge/Container_Apps-Hosting-0078D4?logo=microsoftazure&logoColor=white) **Azure Container Apps** (API, MQTT, Simulator)
-- ![Azure](https://img.shields.io/badge/Static_Web_Apps-Frontend-0078D4?logo=microsoftazure&logoColor=white) **Azure Static Web Apps** (React SPA)
-- ![Azure](https://img.shields.io/badge/SQL_Database-Production_DB-0078D4?logo=microsoftazure&logoColor=white) **Azure SQL Database**
-- ![Azure](https://img.shields.io/badge/Container_Registry-Images-0078D4?logo=microsoftazure&logoColor=white) **Azure Container Registry**
-- ![Bicep](https://img.shields.io/badge/Bicep-IaC-0078D4?logo=microsoftazure&logoColor=white) **Bicep** (Infrastructure as Code)
-
----
-
-## Project Architecture
-
-The project follows **Clean Architecture** principles with a modular, scalable structure.
-
-```bash
-smart-home-simulator/
-├── backend/
-│   └── src/
-│       ├── SmartHome.Api/             # Controllers, Hubs, DTOs, Background Services
-│       │   ├── Controllers/           # REST API endpoints
-│       │   ├── Hubs/                  # SignalR WebSocket hub
-│       │   ├── BackgroundServices/    # MQTT Listener, TCP Server
-│       │   └── Dtos/                  # Data Transfer Objects
-│       ├── SmartHome.Domain/          # Core business logic & entities
-│       │   ├── Entities/              # Device, Room, User, MaintenanceLog
-│       │   └── Interfaces/            # Service & Repository contracts
-│       ├── SmartHome.Infrastructure/  # Data access & external services
-│       │   ├── Persistence/           # EF Core DbContext
-│       │   ├── Repositories/          # Data access implementations
-│       │   └── Services/              # Business logic implementations
-│       └── SmartHome.Simulator/       # IoT MQTT Publisher (Console App)
-├── frontend/
-│   └── src/
-│       ├── components/                # Reusable UI components
-│       │   ├── auth/                  # AuthForm
-│       │   ├── devices/               # DeviceCard, DeviceForm
-│       │   ├── rooms/                 # RoomManager
-│       │   ├── modals/                # MaintenanceModal
-│       │   └── user/                  # UserProfile
-│       ├── services/                  # API client wrapper
-│       └── types.ts                   # TypeScript interfaces
-├── tests/
-│   ├── SmartHome.UnitTests/           # Unit tests with Moq
-│   ├── SmartHome.IntegrationTests/    # API integration tests
-│   ├── SmartHome.BDDTests/            # Gherkin/Reqnroll scenarios
-│   └── SmartHome.PerformanceTests/    # NBomber load tests
-└── .github/
-    └── workflows/                     # CI/CD pipeline
-```
-
-## API Endpoints
-
-### Devices
-
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| **POST** | `/api/devices/lightbulb` | Create a new light bulb |
-| **POST** | `/api/devices/temperaturesensor` | Create a new sensor |
-| **GET** | `/api/devices?search=query` | List devices (with filtering) |
-| **PUT** | `/api/devices/{id}/turn-on` | Toggle device state |
-| **DELETE** | `/api/devices/{id}` | Delete a device |
-
-### Rooms
-
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| **POST** | `/api/rooms` | Create a room |
-| **GET** | `/api/rooms` | List user's rooms |
-| **PUT** | `/api/rooms/{id}` | Rename a room |
-| **DELETE** | `/api/rooms/{id}` | Delete room (cascades to devices) |
-
-### Users
-
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| **POST** | `/api/users/register` | Register new user |
-| **POST** | `/api/users/login` | Login (sets HttpOnly cookie) |
-| **GET** | `/api/users/me` | Get current session |
-| **DELETE** | `/api/users/{id}` | Delete account |
-
-### Logs
-
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| **POST** | `/api/logs` | Add maintenance entry |
-| **GET** | `/api/logs/{deviceId}` | Get device service history |
-| **PUT** | `/api/logs/{id}` | Update log entry |
-| **DELETE** | `/api/logs/{id}` | Delete log entry |
+* **Backend:** `.NET 10`, `ASP.NET Core`, `EF Core`, `MQTTnet`, `SignalR`, `Serilog`
+* **Frontend:** `React 19`, `TypeScript`, `Tailwind CSS v4`
+* **DevOps:** `Docker Compose`, `Azure Container Apps`, `Azure SQL Database`, `Azure Container Registry`, `Bicep`, `GitHub Actions`
 
 ---
 
 ## Getting Started
 
-### Prerequisites
+**Prerequisites:** Docker and Docker Compose installed.
 
-* .NET SDK 10 (or higher)
-* Node.js (v18 or higher)
-* npm or yarn
-
-### Quick Start (Docker)
-
-**1. Clone the repository**
-```
-git clone https://github.com/JakubJurkian/smart-home-simulator.git
+```bash
+# Clone the repository
+git clone [https://github.com/jakub-jurkian/smart-home-simulator.git](https://github.com/jakub-jurkian/smart-home-simulator.git)
 cd smart-home-simulator
-```
-**2. Start the ecosystem**
-```
-docker-compose up --build
-```
-**3. Access the Platform**
-* Frontend: http://localhost:3000
-* API Swagger: http://localhost:5000/swagger
-* MQTT Broker: localhost:1883 (TCP) & localhost:9001 (WebSockets)
 
-### Manual Installation
+# Start the full ecosystem locally
+docker compose up --build
+````
 
-**1. Clone the repository**
-
-    git clone https://github.com/JakubJurkian/smart-home-simulator.git
-    cd smart-home-simulator
-
-**2. Start the Backend API**
-
-    cd backend/src/SmartHome.Api
-    dotnet restore
-    dotnet run
-
-> API will be available at `http://localhost:5187`
-
-**3. Start the Frontend** (New terminal)
-
-    cd frontend
-    npm install
-    npm run dev
-
-> App will be available at `http://localhost:5173`
-
-**4. Start the IoT Simulator** (Optional, new terminal)
-Publishes random temperature readings every 5 seconds.
-
-    cd backend/src/SmartHome.Simulator
-    dotnet run
-
-### TCP Server (Alternative Interface)
-
-With the backend running, connect via PuTTY or any raw TCP client:
-
-* **Host:** `localhost` or `127.0.0.1`
-* **Port:** `9000`
-* **Connection Type:** Raw
-
-**Available commands:** `LOGIN <email> <password>`, `LIST`, `TOGGLE <deviceId>`
+* **Frontend:** `http://localhost:5173`
+* **API / Swagger:** `http://localhost:5000/swagger`
+* **MQTT Broker:** `localhost:1883` (TCP) · `localhost:9001` (WebSockets)
 
 ---
 
-## Running Tests
+## Testing
 
-**All tests**
+```bash
+# Run unit, integration, and BDD suites
+dotnet test
+```
 
-    dotnet test
-
-**Unit tests only**
-
-    dotnet test SmartHome.UnitTests.csproj
-
-**Integration tests**
-
-    dotnet test SmartHome.IntegrationTests.csproj
-
-**BDD tests**
-
-    dotnet test SmartHome.BDDTests.csproj
-
-**Performance tests**
-
-    dotnet run --project SmartHome.PerformanceTests.csproj
-
-### Code Coverage Report
-
-    dotnet test --collect:"XPlat Code Coverage"
-
-    reportgenerator \
-      -reports:"**/coverage.cobertura.xml" \
-      -targetdir:"coveragereport" \
-      -reporttypes:Html
-
-> Report available at: `index.html`
+*NBomber load tests are run separately via:*
+```bash
+dotnet run --project tests/SmartHome.PerformanceTests
+```
 
 ---
 
-## Best Practices Implemented
+## Full Documentation
 
-* **Clean Architecture:** Strict separation between `Domain` (business rules), `Infrastructure` (data access), and `Api` (presentation) layers.
-* **Dependency Injection:** All services and repositories registered in DI container for testability and loose coupling.
-* **Repository Pattern:** Abstracts data access behind interfaces, enabling easy mocking in tests.
-* **TPH Inheritance:** Entity Framework's Table Per Hierarchy for polymorphic device types without complex joins.
-* **Background Services:** Long-running MQTT and TCP listeners implemented as hosted services with proper cancellation token handling.
-* **Secure Authentication:** HttpOnly cookies with `Secure`, `SameSite=Strict` flags and BCrypt password hashing.
-* **Comprehensive Logging:** Serilog with daily file rotation for production debugging.
-* **Responsive UI:** Mobile-first design with Tailwind CSS breakpoints.
-* **Multi-Stage Docker Builds:** Separate build and runtime stages reduce final image size from ~800 MB to ~200 MB.
-* **Infrastructure as Code:** Azure resources fully defined in a Bicep template for reproducible, version-controlled deployments.
-* **Dual Database Strategy:** Automatic SQLite ↔ SQL Server switching based on environment, with zero code changes in repositories.
-* **Cross-Origin Cookie Auth:** Correctly configured `SameSite=None`, `Secure`, and CORS `AllowCredentials` for cross-domain cookie authentication on Azure.
+Detailed schemas, infrastructure setup, and the full API/TCP command reference live in [`/docs`](./docs):
+* [Architecture & Azure deployment](./docs/ARCHITECTURE_AND_DEVOPS.md)
+* [API reference & TCP commands](./docs/API_REFERENCE.md)
+
+---
 
 ## License
-
-Distributed under the [MIT License](LICENSE). See `LICENSE` for more information.
+MIT
