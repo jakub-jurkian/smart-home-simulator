@@ -2,8 +2,6 @@
 
 > **Smart Home Simulator** is a fullstack IoT platform simulating connected home devices. It ingests device data over MQTT and TCP, pushes real-time updates to a React frontend via SignalR, and deploys to Azure through Infrastructure as Code.
 
-[Live Demo](https://lively-pebble-072971f10.6.azurestaticapps.net) · ![CI](https://github.com/jakub-jurkian/smart-home-simulator/actions/workflows/azure-deploy.yml/badge.svg)
-
 ---
 
 ## Engineering Highlights
@@ -20,7 +18,7 @@
 
 * **Backend:** `.NET 10`, `ASP.NET Core`, `EF Core`, `MQTTnet`, `SignalR`, `Serilog`
 * **Frontend:** `React 19`, `TypeScript`, `Tailwind CSS v4`
-* **DevOps:** `Docker Compose`, `Azure Container Apps`, `Azure SQL Database`, `Azure Container Registry`, `Bicep`, `GitHub Actions`
+* **DevOps:** `Docker Compose`, `Bicep`, `GitHub Actions`
 
 ---
 
