@@ -1,26 +1,13 @@
 # ============================================================
-# Smart Home Simulator — Hybrid CI/CD Pipeline
+# Smart Home Simulator — CI Pipeline
 # ============================================================
 #
-# Strategy:
-#   CI (GitHub Actions) — Build, test, verify Docker images, deploy frontend
-#   CD (Local)          — Container deployment via ./deploy.ps1
-#
-# Why hybrid?
-#   University Azure accounts block Entra ID (no Service Principal),
-#   so full `azure/login` is not possible. The SWA deployment token
-#   bypasses this limitation for frontend deployment.
-#
-# Required GitHub Secrets:
-#   AZURE_STATIC_WEB_APPS_API_TOKEN — SWA deployment token
-#     (get it: az staticwebapp secrets list --name <swa-name> -g <rg> --query "properties.apiKey" -o tsv)
-#
-# Required GitHub Variables (Settings → Variables):
-#   API_FQDN — e.g. "smarthome-api.calmforest-ab7056a2.centralus.azurecontainerapps.io"
+# Builds and tests the backend, verifies the Docker images
+# and checks that the frontend builds.
 #
 # ============================================================
 
-name: CI/CD Pipeline
+name: CI Pipeline
 
 on:
   push:
@@ -84,13 +71,11 @@ jobs:
         run: docker build -t smarthome-mqtt:ci -f Dockerfile.mosquitto .
 
   # ========================================================
-  # Job 3: Build & Deploy Frontend to Azure Static Web App
+  # Job 3: Build Frontend
   # ========================================================
-  deploy-frontend:
-    name: Deploy Frontend
+  build-frontend:
+    name: Build Frontend
     runs-on: ubuntu-latest
-    needs: [build-backend, build-docker]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
       - name: Checkout repository
@@ -105,20 +90,9 @@ jobs:
 
       - name: Build frontend
         working-directory: frontend
-        env:
-          VITE_API_URL: https://${{ vars.API_FQDN }}/api
         run: |
           npm ci
           npm run build
-
-      - name: Deploy to Azure Static Web App
-        uses: Azure/static-web-apps-deploy@v1
-        with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          action: upload
-          skip_app_build: true
-          app_location: frontend/dist
 
   # ========================================================
   # Summary
@@ -126,7 +100,7 @@ jobs:
   summary:
     name: Pipeline Summary
     runs-on: ubuntu-latest
-    needs: [build-backend, build-docker, deploy-frontend]
+    needs: [build-backend, build-docker, build-frontend]
     if: always()
 
     steps:
@@ -138,6 +112,4 @@ jobs:
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
           echo "| Backend Build & Tests | ${{ needs.build-backend.result }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Docker Image Builds | ${{ needs.build-docker.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Frontend Deploy | ${{ needs.deploy-frontend.result }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "> **Note:** Container apps (API, MQTT, Simulator) are deployed locally via \`./deploy.ps1\`" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend Build | ${{ needs.build-frontend.result }} |" >> $GITHUB_STEP_SUMMARY

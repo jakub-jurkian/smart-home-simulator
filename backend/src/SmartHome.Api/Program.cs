@@ -39,7 +39,7 @@ if (builder.Environment.EnvironmentName != "Testing")
     }
     else
     {
-        // PRODUCTION (Azure): Use SQL Server
+        // PRODUCTION: Use SQL Server
         var sqlServerConn = builder.Configuration.GetConnectionString("DefaultConnection");
         builder.Services.AddDbContext<SmartHomeDbContext>(options =>
             options.UseSqlServer(sqlServerConn));
@@ -67,7 +67,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         }
         else
         {
-            // Azure (Production)
+            // Production (cross-site HTTPS)
             options.Cookie.SameSite = SameSiteMode.None;
             options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
         }

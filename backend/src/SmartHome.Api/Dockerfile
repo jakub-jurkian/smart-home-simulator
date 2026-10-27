@@ -18,7 +18,7 @@ RUN dotnet publish "SmartHome.Api.csproj" -c Release -o /app/publish /p:UseAppHo
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
 COPY --from=build /app/publish .
-# Azure App Service set PORT dynamically
+# Listen on port 8080 inside the container
 ENV ASPNETCORE_URLS=http://+:8080
 EXPOSE 8080
 
